@@ -36,7 +36,7 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          gcloud builds submit ./backend \
+          gcloud builds submit \
             --tag ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --no-source \
             --project ${{ secrets.GCP_PROJECT_ID }}

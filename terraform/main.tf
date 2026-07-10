@@ -49,28 +49,28 @@ resource "google_service_account" "github_actions" {
   description  = "Service account used by GitHub Actions to deploy to Cloud Run"
 }
 
-# IAM: Cloud Run Admin + Artifact Registry Writer + Cloud Build Editor
+# IAM: Full CI/CD pipeline permissions
+resource "google_project_iam_member" "github_actions_cloudbuild_editor" {
+  project = var.project_id
+  role    = "roles/cloudbuild.editor"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
+resource "google_project_iam_member" "github_actions_service_usage_admin" {
+  project = var.project_id
+  role    = "roles/serviceusage.admin"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
+resource "google_project_iam_member" "github_actions_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
 resource "google_project_iam_member" "github_actions_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
-  member  = "serviceAccount:${google_service_account.github_actions.email}"
-}
-
-resource "google_project_iam_member" "github_actions_artifactregistry_writer" {
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${google_service_account.github_actions.email}"
-}
-
-resource "google_project_iam_member" "github_actions_cloudbuild_editor" {
-  project = var.project_id
-  role    = "roles/cloudbuild.builds.builder"
-  member  = "serviceAccount:${google_service_account.github_actions.email}"
-}
-
-resource "google_project_iam_member" "github_actions_service_usage" {
-  project = var.project_id
-  role    = "roles/serviceusage.services.use"
   member  = "serviceAccount:${google_service_account.github_actions.email}"
 }
 

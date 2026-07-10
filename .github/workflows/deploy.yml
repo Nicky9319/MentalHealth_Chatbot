@@ -1,0 +1,100 @@
+name: Deploy to Cloud Run (Backend) + Vercel (Frontend)
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  SERVICE_NAME: mentalhealth-chatbot-backend
+  REGION: us-central1
+  ARTIFACT_REPO: mentalhealth-chatbot
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend to Cloud Run
+    runs-on: ubuntu-latest
+
+    outputs:
+      cloud_run_url: ${{ steps.cloudrun-url.outputs.CLOUD_RUN_URL }}
+      cloud_run_hostname: ${{ steps.cloudrun-url.outputs.CLOUD_RUN_HOSTNAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and push Docker image
+        run: |
+          gcloud builds submit ./backend \
+            --tag ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --dockerfile ./backend/Dockerfile \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --cpu 1 \
+            --timeout 300 \
+            --max-instances 5 \
+            --min-instances 0 \
+            --set-env-vars "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},FRONTEND_ORIGIN=https://${{ secrets.VERCEL_FRONTEND_URL }}" \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --quiet
+
+      - name: Get Cloud Run URL
+        id: cloudrun-url
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format "value(status.url)" \
+            --project ${{ secrets.GCP_PROJECT_ID }})
+          HOSTNAME=$(echo "$URL" | sed 's|https://||')
+          echo "CLOUD_RUN_URL=$URL" >> $GITHUB_OUTPUT
+          echo "CLOUD_RUN_HOSTNAME=$HOSTNAME" >> $GITHUB_OUTPUT
+          echo "Backend deployed at: $URL"
+
+  update-vercel-env:
+    name: Update Vercel Environment Variables
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+
+    steps:
+      - name: Update Vercel env vars with backend hostname
+        run: |
+          npx vercel@latest env add VITE_SERVER_IP "${{ needs.deploy-backend.outputs.cloud_run_hostname }}" production --token ${{ secrets.VERCEL_TOKEN }} --yes
+          npx vercel@latest env add VITE_SERVER_PORT "443" production --token ${{ secrets.VERCEL_TOKEN }} --yes
+          npx vercel@latest env add VITE_USE_HTTPS "true" production --token ${{ secrets.VERCEL_TOKEN }} --yes
+          echo "✅ Vercel env vars updated"
+
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, update-vercel-env]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx vercel@latest deploy --prod --token ${{ env.VERCEL_TOKEN }}

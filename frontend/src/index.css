@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+.custom-dashed {
+  border: 1px dashed black;
+  border-image: repeating-linear-gradient(
+      45deg,
+      black 0,
+      black 10px,
+      transparent 10px,
+      transparent 20px
+    )
+    20;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+@layer utilities {
+  .no-scroll {
+    overflow: hidden;
+  }
+  /* Hide scrollbar for WebKit browsers */
+  .no-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+@layer utilities {
+  .scrollbar-thin {
+    /* Enable vertical scrolling when needed */
+    overflow-y: auto;
+    /* Firefox: make scrollbar thin with custom colors */
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f1f5f9;
+  }
+
+  /* WebKit browsers */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 8px;
+    min-height: 20px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background-color: #f1f5f9;
+  }
+
+  /* Hide the up and down arrow buttons on the scrollbar for WebKit browsers */
+  .scrollbar-thin::-webkit-scrollbar-button {
+    display: none;
+  }
+}
+
+/* Custom styles for chat messages */
+.message-transition {
+  transition: all 0.3s ease;
+}
+
+.message-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Display message text with proper line breaks */
+.max-w-xs, .max-w-md, .max-w-lg {
+  white-space: pre-wrap;
+}
+
+/* Typing indicator animation */
+.typing-indicator {
+  display: inline-block;
+  position: relative;
+}
+
+.typing-indicator::after {
+  content: "...";
+  position: relative;
+  display: inline-block;
+  animation: typingDots 1.5s infinite;
+  width: 12px;
+  text-align: left;
+}
+
+@keyframes typingDots {
+  0% { content: "."; }
+  33% { content: ".."; }
+  66% { content: "..."; }
+  100% { content: "."; }
+}
+
+/* Custom Gradient Background */

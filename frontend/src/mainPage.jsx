@@ -1,0 +1,311 @@
+import React, { useState, useEffect } from 'react';
+import LeftPanel from './Components/leftPanel';
+import ChatWindow from './Components/chatWindow';
+
+const MainPage = () => {
+    // =========== State Management ===========
+    const [sessions, setSessions] = useState([]);
+    const [activeSession, setActiveSession] = useState(null);
+    const [sessionData, setSessionData] = useState({});
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch sessions on initial load
+    useEffect(() => {
+        fetchAllSessions();
+    }, []);
+
+    // =========== API Functions ===========
+
+    /**
+     * Makes an API request to the specified endpoint.
+     * @param {string} endpoint - API endpoint.
+     * @param {string} method - HTTP method (GET, POST, etc.).
+     * @param {object} data - Request data.
+     * @returns {Promise} - API response promise.
+     */
+    const makeApiRequest = async (endpoint, method, data) => {
+        // Build URL from env vars
+        const serverIp = import.meta.env.VITE_SERVER_IP || '127.0.0.1';
+        const serverPort = import.meta.env.VITE_SERVER_PORT || '8000';
+        const useHttps = import.meta.env.VITE_USE_HTTPS === 'true';
+
+        const protocol = useHttps ? 'https' : 'http';
+        const baseUrl = serverIp ? `${protocol}://${serverIp}${serverPort ? ':' + serverPort : ''}` : '';
+        const url = `${baseUrl}${endpoint}`;
+
+        console.log(`API ${method} to ${url}:`, data);
+        
+        try {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                mode: 'cors', // Explicitly set CORS mode
+                credentials: 'same-origin', // Include credentials if needed
+            };
+            
+            if (method.toUpperCase() !== 'GET' && data) {
+                options.body = JSON.stringify(data);
+            }
+            
+            const response = await fetch(url, options);
+            
+            // Check if response is successful before trying to parse JSON
+            if (!response.ok) {
+                const errorMessage = `Server returned ${response.status} ${response.statusText} for ${url}`;
+                console.error(errorMessage);
+                throw new Error(errorMessage);
+            }
+            
+            const responseData = await response.json();
+            console.log(responseData)
+            return responseData;
+        } catch (error) {
+            console.error(`Error making ${method} request to ${url}:`, error);
+            throw error;
+        }
+    };
+
+    /**
+     * Fetches all available sessions from the API.
+     */
+    const fetchAllSessions = async () => {
+        setIsLoading(true);
+        try {
+            console.log("Fetching all sessions...");
+            const response = await makeApiRequest('/FetchAllSessions', 'GET');
+            if (response && Array.isArray(response)) {
+                // Transform the session IDs into objects with id and name properties
+                const formattedSessions = response.map(sessionId => ({
+                    id: sessionId,
+                    name: `Session ${sessionId}`
+                }));
+                setSessions(formattedSessions);
+            }
+            setIsLoading(false);
+        } catch (error) {
+            console.error("Error fetching sessions:", error);
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Fetches all messages for a specific session.
+     * @param {string} sessionId - ID of the session to fetch messages for.
+     */
+    const fetchSessionMessages = async (sessionId) => {
+        try {
+            console.log("Fetching messages for session:", sessionId);
+            const response = await makeApiRequest(`/FetchSessionMessageHistory/${sessionId}`, 'GET');
+            console.log(response);
+            if (response && response.messages) {
+                // Transform messages from {content, type} format to {text, isUser} format
+                const transformedMessages = response.messages.map(msg => ({
+                    text: msg.content,
+                    isUser: msg.type === 'human'
+                }));
+                
+                setSessionData(prev => ({
+                    ...prev,
+                    [sessionId]: {
+                        ...prev[sessionId],
+                        messages: transformedMessages
+                    }
+                }));
+            }
+        } catch (error) {
+            console.error("Error fetching session messages:", error);
+        }
+    };
+
+    /**
+     * Creates a new chat session.
+     */
+    const createNewSession = async () => {
+        try {
+            // Make API request to create session on server without providing an ID
+            const response = await makeApiRequest('/CreateSession', 'POST');
+            
+            // Get the session ID generated by the backend
+            const newSessionId = response.session_id;
+            const newSessionName = `Session ${newSessionId}`;
+            
+            // Update local state after successful creation
+            const updatedSessions = [...sessions, { id: newSessionId, name: newSessionName }];
+            setSessions(updatedSessions);
+            setActiveSession(newSessionId);
+            setSessionData(prev => ({
+                ...prev,
+                [newSessionId]: {
+                    messages: [],
+                    created: new Date().toISOString()
+                }
+            }));
+        } catch (error) {
+            console.error("Error creating session:", error);
+        }
+    };
+
+    /**
+     * Generates a chatbot response for a given session message.
+     * This calls the /GenerateResponse endpoint with session_id and message.
+     * @param {string} sessionId - ID of the current session.
+     * @param {string} message - User's message.
+     * @returns {Promise<object>} - Response from the chatbot API.
+     */
+    const generateResponse = async (sessionId, message) => {
+        try {
+            console.log("Generating response for session:", sessionId, "with message:", message);
+    
+            // Prepare JSON payload
+            const payload = JSON.stringify({
+                session_id: sessionId,
+                message: message,
+            });
+    
+            // Get server info from environment variables
+            const serverIp = import.meta.env.VITE_SERVER_IP || '127.0.0.1';
+            const serverPort = import.meta.env.VITE_SERVER_PORT || '8000';
+            const useHttps = import.meta.env.VITE_USE_HTTPS === 'true';
+    
+            // Construct base URL
+            const protocol = useHttps ? 'https' : 'http';
+            const baseUrl = `${protocol}://${serverIp}:${serverPort}`;
+            const url = `${baseUrl}/GenerateResponse`;
+    
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: payload,
+                mode: 'cors',
+                credentials: 'same-origin',
+            });
+    
+            if (!response.ok) {
+                const errorMessage = `Server returned ${response.status} ${response.statusText} for ${url}`;
+                console.error(errorMessage);
+                throw new Error(errorMessage);
+            }
+    
+            // Return the response data directly - will be handled in ChatWindow
+            return await response.json();
+        } catch (error) {
+            console.error("Error generating response:", error);
+            throw error;
+        }
+    };
+
+    /**
+     * Processes an audio file and generates a response.
+     * @param {string} sessionId - ID of the current session.
+     * @param {File} audioFile - Audio file to process.
+     * @returns {Promise<object>} - Response from the audio processing API.
+     */
+    const processAudioFile = async (sessionId, audioFile) => {
+        try {
+            console.log(`Processing audio file: ${audioFile.name} for session: ${sessionId}`);
+            
+            // Convert the audio file to base64
+            const toBase64 = (file) => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result.split(',')[1]); // Extract base64 string
+                reader.onerror = (error) => reject(error);
+            });
+            
+            const audioBase64 = await toBase64(audioFile);
+            
+            // Prepare payload
+            const payload = {
+                session_id: sessionId,
+                audio_data: audioBase64,
+            };
+            
+
+            const response = await makeApiRequest('/GenerateAudioResponse', 'POST', payload);
+            console.log('Audio response:', response);
+            return response;
+        } catch (error) {
+            console.error("Error processing audio:", error);
+            throw error;
+        }
+    };
+
+    // =========== UI Event Handlers ===========
+    
+    /**
+     * Handles selecting a session from the list.
+     * @param {string} sessionId - ID of the selected session.
+     */
+    const handleSessionSelect = async (sessionId) => {
+        setActiveSession(sessionId);
+        // If we don't have the session data loaded yet, fetch it
+        if (!sessionData[sessionId] || !sessionData[sessionId].messages) {
+            await fetchSessionMessages(sessionId);
+        }
+    };
+
+    /**
+     * Updates messages for a specific session.
+     * @param {string} sessionId - ID of the session to update.
+     * @param {Array} messages - Updated message array.
+     */
+    const updateSessionMessages = (sessionId, messages) => {
+        setSessionData(prev => ({
+            ...prev,
+            [sessionId]: {
+                ...prev[sessionId],
+                messages: messages
+            }
+        }));
+    };
+
+    return (
+        <div className="flex w-screen h-screen p-4 bg-gray-100">
+            <div className="w-1/4 pr-4 h-full">
+                <LeftPanel 
+                    sessions={sessions} 
+                    onAddSession={createNewSession} 
+                    onSelectSession={handleSessionSelect}
+                    activeSession={activeSession}
+                    isLoading={isLoading}
+                />
+            </div>
+            <div className="w-3/4 pl-4 h-full">
+                {activeSession ? (
+                    <ChatWindow 
+                        sessionId={activeSession}
+                        messages={sessionData[activeSession]?.messages || []}
+                        onMessagesUpdate={(messages) => updateSessionMessages(activeSession, messages)}
+                        generateResponse={generateResponse}
+                        processAudioFile={processAudioFile} // Pass the new audio processing function
+                        makeApiRequest={makeApiRequest}
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg shadow-lg">
+                        <div className="text-center p-8">
+                            <div className="mb-6 text-indigo-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-semibold text-gray-800 mb-2">No Active Conversation</h3>
+                            <p className="text-gray-600 mb-6">Click the "Add Session" button to start a new conversation.</p>
+                            <button 
+                                onClick={createNewSession}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                            >
+                                Create New Session
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default MainPage;

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+langchain-community
+langchain-core
+langchain-groq
+groq
+python-dotenv
+SpeechRecognition
+librosa
+numpy

@@ -68,6 +68,12 @@ resource "google_project_iam_member" "github_actions_cloudbuild_editor" {
   member  = "serviceAccount:${google_service_account.github_actions.email}"
 }
 
+resource "google_project_iam_member" "github_actions_service_usage" {
+  project = var.project_id
+  role    = "roles/serviceusage.services.use"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
 # =============================================================================
 # Cloud Run Service (optional — can also be deployed via gcloud CLI in CI)
 # =============================================================================
